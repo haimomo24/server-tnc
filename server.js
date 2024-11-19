@@ -32,6 +32,12 @@ db.connect((err) => {
     console.log('Kết nối thành công tới cơ sở dữ liệu');
   }
 });
+// Cấu hình CORS
+app.use(cors({
+  origin: '*', // Cho phép tất cả các domain
+  methods: ['GET', 'POST', 'PUT', 'DELETE'], // Các phương thức cho phép
+  allowedHeaders: ['Content-Type', 'Authorization'] // Headers cho phép
+}));
 
 // Cấu hình multer để xử lý upload file
 const storage = multer.memoryStorage();
@@ -155,12 +161,63 @@ app.post('/products', upload.fields([
 });
 
 // API thêm sản phẩm mới với Cloudinary
-// First, configure Cloudinary
-const cloudinary = require('cloudinary').v2;
-cloudinary.config({
-    cloud_name: 'your_cloud_name',
-    api_key: 'your_api_key', 
-    api_secret: 'your_api_secret'
+pp.post('/products', upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'imagge_2', maxCount: 1 },
+  { name: 'image_3', maxCount: 1 }
+]), async (req, res) => {
+  try {
+      // Thêm headers CORS
+      res.header('Access-Control-Allow-Origin', '*');
+      res.header('Access-Control-Allow-Methods', 'POST');
+      res.header('Access-Control-Allow-Headers', 'Content-Type');
+
+      const { name, price, description, category, cpu, ram, sd, manhinh, card } = req.body;
+
+      // Ghi log dữ liệu nhận được
+      console.log('Dữ liệu nhận được:', {
+          body: req.body,
+          files: req.files
+      });
+
+      // Xử lý ảnh và lưu vào database
+      const query = `
+          INSERT INTO product 
+          (name, price, description, category, image, imagge_2, image_3, cpu, ram, sd, manhinh, card) 
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
+
+      const values = [
+          name,
+          Number(price),
+          description,
+          category,
+          req.files?.image?.[0]?.path || null,
+          req.files?.imagge_2?.[0]?.path || null,
+          req.files?.image_3?.[0]?.path || null,
+          cpu,
+          ram,
+          sd,
+          manhinh,
+          card
+      ];
+
+      db.execute(query, values, (err, result) => {
+          if (err) {
+              console.error('Lỗi database:', err);
+              return res.status(500).json({ error: 'Lỗi database', details: err.message });
+          }
+          
+          res.status(201).json({
+              message: 'Thêm sản phẩm thành công',
+              productId: result.insertId
+          });
+      });
+
+  } catch (error) {
+      console.error('Lỗi server:', error);
+      res.status(500).json({ error: 'Lỗi server', details: error.message });
+  }
 });
 
 app.post('/products', upload.fields([
