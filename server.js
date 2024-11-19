@@ -107,16 +107,13 @@ app.post('/products', upload.fields([
   { name: 'image_3', maxCount: 1 }
 ]), async (req, res) => {
   try {
+      // Log toàn bộ request
+      console.log('Request body:', req.body);
+      console.log('Request files:', req.files);
+
       const { name, price, description, category, cpu, ram, sd, manhinh, card } = req.body;
 
-      // Kiểm tra dữ liệu đầu vào
-      if (!name || !price || !description || !category) {
-          return res.status(400).json({
-              error: 'Thiếu thông tin sản phẩm cần thiết'
-          });
-      }
-
-      // Upload ảnh lên Cloudinary
+      // Upload ảnh
       const uploadToCloudinary = async (file) => {
           if (!file) return null;
           const b64 = Buffer.from(file.buffer).toString('base64');
@@ -125,47 +122,68 @@ app.post('/products', upload.fields([
           return result.secure_url;
       };
 
-      const image = req.files['image'] ? await uploadToCloudinary(req.files['image'][0]) : null;
-      const imagge_2 = req.files['imagge_2'] ? await uploadToCloudinary(req.files['imagge_2'][0]) : null;
-      const image_3 = req.files['image_3'] ? await uploadToCloudinary(req.files['image_3'][0]) : null;
+      // Upload từng ảnh riêng biệt
+      let image = null;
+      let imagge_2 = null;
+      let image_3 = null;
 
-      // Sử dụng Promise để xử lý database
-      const insertProduct = () => {
-          return new Promise((resolve, reject) => {
-              const query = 'INSERT INTO product (name, price, description, category, image, imagge_2, image_3, cpu, ram, sd, manhinh, card) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-              
-              db.execute(query, [
-                  name,
-                  Number(price),
-                  description,
-                  category,
-                  image,
-                  imagge_2,
-                  image_3,
-                  cpu || '',
-                  ram || '',
-                  sd || '',
-                  manhinh || '',
-                  card || ''
-              ], (err, results) => {
-                  if (err) reject(err);
-                  else resolve(results);
-              });
-          });
+      try {
+          if (req.files['image']) {
+              image = await uploadToCloudinary(req.files['image'][0]);
+          }
+          if (req.files['imagge_2']) {
+              imagge_2 = await uploadToCloudinary(req.files['imagge_2'][0]);
+          }
+          if (req.files['image_3']) {
+              image_3 = await uploadToCloudinary(req.files['image_3'][0]);
+          }
+      } catch (uploadError) {
+          console.error('Upload error:', uploadError);
+      }
+
+      // Chuẩn bị dữ liệu insert
+      const productData = {
+          name: name || '',
+          price: price ? Number(price) : 0,
+          description: description || '',
+          category: category || '',
+          image: image,
+          imagge_2: imagge_2,
+          image_3: image_3,
+          cpu: cpu || '',
+          ram: ram || '',
+          sd: sd || '',
+          manhinh: manhinh || '',
+          card: card || ''
       };
 
-      const result = await insertProduct();
-      
+      console.log('Data to insert:', productData);
+
+      // Thực hiện insert với Promise
+      const result = await new Promise((resolve, reject) => {
+          const query = 'INSERT INTO product SET ?';
+          db.query(query, productData, (err, results) => {
+              if (err) {
+                  console.error('Insert error:', err);
+                  reject(err);
+              } else {
+                  resolve(results);
+              }
+          });
+      });
+
       res.status(201).json({
           message: 'Thêm sản phẩm thành công',
-          productId: result.insertId
+          productId: result.insertId,
+          productData
       });
 
   } catch (error) {
-      console.error('Chi tiết lỗi:', error);
+      console.error('Final error:', error);
       res.status(500).json({
           error: 'Lỗi khi lưu vào database',
-          details: error.message
+          details: error.message,
+          stack: error.stack
       });
   }
 });
