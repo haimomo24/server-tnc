@@ -109,6 +109,13 @@ app.post('/products', upload.fields([
   try {
       const { name, price, description, category, cpu, ram, sd, manhinh, card } = req.body;
       
+      // Log dữ liệu nhận được
+      console.log('Received data:', {
+          name, price, description, category, cpu, ram, sd, manhinh, card,
+          files: req.files
+      });
+
+      // Xử lý upload ảnh
       const uploadToCloudinary = async (file) => {
           if (!file) return null;
           try {
@@ -118,6 +125,7 @@ app.post('/products', upload.fields([
                   resource_type: 'auto',
                   folder: 'products'
               });
+              console.log('Upload success:', uploadResponse.secure_url);
               return uploadResponse.secure_url;
           } catch (err) {
               console.error('Upload error:', err);
@@ -125,43 +133,51 @@ app.post('/products', upload.fields([
           }
       };
 
-      let imageUrls = {
-          image: null,
-          imagge_2: null,
-          image_3: null
+      // Upload ảnh và lấy URL
+      const imageUrls = {
+          image: req.files['image'] ? await uploadToCloudinary(req.files['image'][0]) : null,
+          imagge_2: req.files['imagge_2'] ? await uploadToCloudinary(req.files['imagge_2'][0]) : null,
+          image_3: req.files['image_3'] ? await uploadToCloudinary(req.files['image_3'][0]) : null
       };
 
-      // Upload từng file riêng biệt
-      if (req.files['image']) {
-          imageUrls.image = await uploadToCloudinary(req.files['image'][0]);
-      }
-      if (req.files['imagge_2']) {
-          imageUrls.imagge_2 = await uploadToCloudinary(req.files['imagge_2'][0]);
-      }
-      if (req.files['image_3']) {
-          imageUrls.image_3 = await uploadToCloudinary(req.files['image_3'][0]);
-      }
+      console.log('Image URLs:', imageUrls);
 
+      // Chuẩn bị dữ liệu
+      const priceNumber = parseFloat(price);
+      const insertData = [
+          name || '',
+          priceNumber || 0,
+          description || '',
+          category || '',
+          imageUrls.image || null,
+          imageUrls.imagge_2 || null,
+          imageUrls.image_3 || null,
+          cpu || '',
+          ram || '',
+          sd || '',
+          manhinh || '',
+          card || ''
+      ];
+
+      console.log('Data to insert:', insertData);
+
+      // Thực hiện insert
       const query = 'INSERT INTO product (name, price, description, category, image, imagge_2, image_3, cpu, ram, sd, manhinh, card) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-
-      db.execute(query, [
-          name, 
-          price, 
-          description, 
-          category, 
-          imageUrls.image, 
-          imageUrls.imagge_2, 
-          imageUrls.image_3, 
-          cpu, 
-          ram, 
-          sd, 
-          manhinh, 
-          card
-      ], (err, results) => {
+      
+      db.execute(query, insertData, (err, results) => {
           if (err) {
-              console.error('Database error:', err);
-              return res.status(500).json({ error: 'Lỗi khi lưu vào database' });
+              console.error('Database error details:', {
+                  code: err.code,
+                  errno: err.errno,
+                  sqlMessage: err.sqlMessage,
+                  sqlState: err.sqlState
+              });
+              return res.status(500).json({
+                  error: 'Lỗi khi lưu vào database',
+                  details: err.message
+              });
           }
+          
           res.status(201).json({
               message: 'Thêm sản phẩm thành công',
               productId: results.insertId,
@@ -171,12 +187,13 @@ app.post('/products', upload.fields([
 
   } catch (error) {
       console.error('Server error:', error);
-      res.status(500).json({ 
-          error: 'Lỗi upload ảnh',
-          details: error.message 
+      res.status(500).json({
+          error: 'Lỗi server',
+          details: error.message
       });
   }
 });
+
 
 
 // API lấy chi tiết sản phẩm theo ID
