@@ -154,82 +154,93 @@ app.post('/products', upload.fields([
 });
 
 // API thêm sản phẩm mới với Cloudinary
-app.post('/products', upload.fields([
-  { name: 'image', maxCount: 1 },
-  { name: 'imagge_2', maxCount: 1 },
-  { name: 'image_3', maxCount: 1 }
-]), async (req, res) => {
-  try {
-      // Log incoming data
-      console.log('Body:', req.body);
-      console.log('Files:', req.files);
-
-      const { name, price, description, category, cpu, ram, sd, manhinh, card } = req.body;
-
-      // Check if files exist
-      if (!req.files || !req.files['image']) {
-          return res.status(400).json({ error: 'Image file is required' });
-      }
-
-      // Upload to Cloudinary
-      const uploadToCloudinary = async (file) => {
-          if (!file) return null;
-          const result = await cloudinary.uploader.upload(file.path, {
-              folder: 'products'
-          });
-          return result.secure_url;
-      };
-
-      // Process each image
-      const imageUrls = {
-          image: await uploadToCloudinary(req.files['image'][0]),
-          imagge_2: req.files['imagge_2'] ? await uploadToCloudinary(req.files['imagge_2'][0]) : null,
-          image_3: req.files['image_3'] ? await uploadToCloudinary(req.files['image_3'][0]) : null
-      };
-
-      // Insert into database
-      const query = `
-          INSERT INTO product 
-          (name, price, description, category, image, imagge_2, image_3, cpu, ram, sd, manhinh, card) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `;
-
-      const values = [
-          name,
-          Number(price),
-          description,
-          category,
-          imageUrls.image,
-          imageUrls.imagge_2,
-          imageUrls.image_3,
-          cpu,
-          ram,
-          sd,
-          manhinh,
-          card
-      ];
-
-      db.execute(query, values, (err, result) => {
-          if (err) {
-              console.error('Database error:', err);
-              return res.status(500).json({ error: 'Database error', details: err.message });
-          }
-          
-          res.status(201).json({
-              message: 'Product added successfully',
-              productId: result.insertId,
-              imageUrls
-          });
-      });
-
-  } catch (error) {
-      console.error('Server error:', error);
-      res.status(500).json({ 
-          error: 'Server error', 
-          details: error.message 
-      });
-  }
+// First, configure Cloudinary
+const cloudinary = require('cloudinary').v2;
+cloudinary.config({
+    cloud_name: 'your_cloud_name',
+    api_key: 'your_api_key', 
+    api_secret: 'your_api_secret'
 });
+
+app.post('/products', upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'imagge_2', maxCount: 1 },
+    { name: 'image_3', maxCount: 1 }
+]), async (req, res) => {
+    try {
+        const { name, price, description, category, cpu, ram, sd, manhinh, card } = req.body;
+
+        // Handle file uploads
+        const uploadToCloudinary = async (file) => {
+            if (!file) return null;
+            try {
+                const result = await cloudinary.uploader.upload(file.path);
+                return result.secure_url;
+            } catch (error) {
+                console.error('Cloudinary upload error:', error);
+                return null;
+            }
+        };
+
+        // Upload images
+        let imageUrls = {
+            image: null,
+            imagge_2: null,
+            image_3: null
+        };
+
+        if (req.files) {
+            if (req.files['image']) {
+                imageUrls.image = await uploadToCloudinary(req.files['image'][0]);
+            }
+            if (req.files['imagge_2']) {
+                imageUrls.imagge_2 = await uploadToCloudinary(req.files['imagge_2'][0]);
+            }
+            if (req.files['image_3']) {
+                imageUrls.image_3 = await uploadToCloudinary(req.files['image_3'][0]);
+            }
+        }
+
+        // Insert into database
+        const query = 'INSERT INTO product (name, price, description, category, image, imagge_2, image_3, cpu, ram, sd, manhinh, card) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+        
+        const values = [
+            name,
+            Number(price),
+            description,
+            category,
+            imageUrls.image,
+            imageUrls.imagge_2,
+            imageUrls.image_3,
+            cpu,
+            ram,
+            sd,
+            manhinh,
+            card
+        ];
+
+        db.execute(query, values, (err, result) => {
+            if (err) {
+                console.error('Database error:', err);
+                return res.status(500).json({ error: 'Database error', details: err.message });
+            }
+            
+            res.status(201).json({
+                message: 'Product added successfully',
+                productId: result.insertId,
+                imageUrls
+            });
+        });
+
+    } catch (error) {
+        console.error('Server error:', error);
+        res.status(500).json({
+            error: 'Server error',
+            details: error.message
+        });
+    }
+});
+
 
 
 
