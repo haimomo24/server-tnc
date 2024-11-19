@@ -163,14 +163,17 @@ app.put('/products/:id', upload.fields([
     { name: 'image_3', maxCount: 1 }
 ]), async (req, res) => {
     try {
+      console.log('Files received:', req.files);
         const productId = req.params.id;
         const { name, price, description, category, cpu, ram, sd, manhinh, card } = req.body;
 
         const uploadToCloudinary = async (file) => {
             if (!file) return null;
+            console.log('Uploading file:', file.originalname);
             const b64 = Buffer.from(file.buffer).toString('base64');
             const dataURI = "data:" + file.mimetype + ";base64," + b64;
             const result = await cloudinary.uploader.upload(dataURI);
+            console.log('Upload result:', result);
             return result.secure_url;
         };
 
@@ -206,7 +209,7 @@ app.put('/products/:id', upload.fields([
             res.status(200).json({ message: 'Cập nhật sản phẩm thành công' });
         });
     } catch (error) {
-        console.error('Lỗi upload ảnh:', error);
+      console.log('Detailed error:', error);
         res.status(500).json({ error: 'Lỗi upload ảnh' });
     }
 });
