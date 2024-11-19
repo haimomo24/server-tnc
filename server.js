@@ -89,15 +89,68 @@ app.post('/register', (req, res) => {
 });
 
 // API lấy danh sách sản phẩm
-app.get('/products', (req, res) => {
-  const query = 'SELECT * FROM product';
-  db.execute(query, (err, results) => {
-    if (err) {
-      console.error('Lỗi khi truy vấn bảng sản phẩm:', err);
-      return res.status(500).json({ error: 'Lỗi hệ thống' });
-    }
-    res.status(200).json(results);
-  });
+app.post('/products', upload.fields([
+  { name: 'image', maxCount: 1 },
+  { name: 'imagge_2', maxCount: 1 },
+  { name: 'image_3', maxCount: 1 }
+]), async (req, res) => {
+  try {
+      const { name, price, description, category, cpu, ram, sd, manhinh, card } = req.body;
+      
+      // Upload images to Cloudinary
+      const uploadToCloudinary = async (file) => {
+          if (!file) return null;
+          try {
+              const b64 = Buffer.from(file.buffer).toString('base64');
+              const dataURI = "data:" + file.mimetype + ";base64," + b64;
+              const result = await cloudinary.uploader.upload(dataURI, {
+                  resource_type: 'auto',
+                  folder: 'products'
+              });
+              return result.secure_url;
+          } catch (err) {
+              console.error('Cloudinary upload error:', err);
+              return null;
+          }
+      };
+
+      // Process each image
+      const image = req.files['image'] ? await uploadToCloudinary(req.files['image'][0]) : null;
+      const imagge_2 = req.files['imagge_2'] ? await uploadToCloudinary(req.files['imagge_2'][0]) : null;
+      const image_3 = req.files['image_3'] ? await uploadToCloudinary(req.files['image_3'][0]) : null;
+
+      // Insert into database
+      const query = 'INSERT INTO product SET ?';
+      const productData = {
+          name,
+          price: Number(price),
+          description,
+          category,
+          image,
+          imagge_2,
+          image_3,
+          cpu,
+          ram,
+          sd,
+          manhinh,
+          card
+      };
+
+      db.query(query, productData, (err, result) => {
+          if (err) {
+              console.error('Database error:', err);
+              return res.status(500).json({ error: 'Database error', details: err.message });
+          }
+          res.status(201).json({
+              message: 'Product added successfully',
+              productId: result.insertId
+          });
+      });
+
+  } catch (error) {
+      console.error('Server error:', error);
+      res.status(500).json({ error: 'Server error', details: error.message });
+  }
 });
 
 // API thêm sản phẩm mới với Cloudinary
