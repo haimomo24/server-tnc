@@ -3,18 +3,10 @@ const mysql = require('mysql2');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
-const cloudinary = require('cloudinary').v2;
 require('dotenv').config(); // Đảm bảo bạn đã cài đặt dotenv
 
 const app = express();
 const port = 5000;
-
-// Cấu hình Cloudinary từ biến môi trường
-cloudinary.config({
-    cloud_name: process.env.CLOUDINARY_CLOUD_NAME,
-    api_key: process.env.CLOUDINARY_API_KEY,
-    api_secret: process.env.CLOUDINARY_API_SECRET
-});
 
 // Cấu hình MySQL kết nối
 const db = mysql.createConnection({
@@ -47,10 +39,10 @@ app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 // Cấu hình multer để upload file
 const storage = multer.diskStorage({
     destination: function (req, file, cb) {
-        cb(null, 'uploads/product-images/')
+        cb(null, 'uploads/product-images/');
     },
     filename: function (req, file, cb) {
-        cb(null, Date.now() + path.extname(file.originalname))
+        cb(null, Date.now() + path.extname(file.originalname));
     }
 });
 
@@ -103,7 +95,7 @@ app.post('/products', upload.fields([
     { name: 'image', maxCount: 1 },
     { name: 'imagge_2', maxCount: 1 },
     { name: 'image_3', maxCount: 1 }
-]), async (req, res) => {
+]), (req, res) => {
     try {
         const { name, price, description, category, cpu, ram, sd, manhinh, card } = req.body;
 
@@ -112,16 +104,10 @@ app.post('/products', upload.fields([
             files: req.files
         });
 
-        const uploadToCloudinary = async (file) => {
-            if (!file) return null;
-            const result = await cloudinary.uploader.upload(file.path);
-            return result.secure_url;
-        };
-
-        const imageUrls = {
-            image: req.files?.image ? await uploadToCloudinary(req.files['image'][0]) : null,
-            imagge_2: req.files?.imagge_2 ? await uploadToCloudinary(req.files['imagge_2'][0]) : null,
-            image_3: req.files?.image_3 ? await uploadToCloudinary(req.files['image_3'][0]) : null
+        const imagePaths = {
+            image: req.files?.image ? req.files['image'][0].path : null,
+            imagge_2: req.files?.imagge_2 ? req.files['imagge_2'][0].path : null,
+            image_3: req.files?.image_3 ? req.files['image_3'][0].path : null
         };
 
         const query = `
@@ -135,9 +121,9 @@ app.post('/products', upload.fields([
             Number(price),
             description,
             category,
-            imageUrls.image,
-            imageUrls.imagge_2,
-            imageUrls.image_3,
+            imagePaths.image,
+            imagePaths.imagge_2,
+            imagePaths.image_3,
             cpu,
             ram,
             sd,
@@ -150,11 +136,11 @@ app.post('/products', upload.fields([
                 console.error('Lỗi database:', err);
                 return res.status(500).json({ error: 'Lỗi database', details: err.message });
             }
-            
+
             res.status(201).json({
                 message: 'Thêm sản phẩm thành công',
                 productId: result.insertId,
-                imageUrls
+                imagePaths
             });
         });
 
