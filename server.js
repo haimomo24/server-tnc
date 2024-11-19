@@ -160,30 +160,35 @@ app.post('/products', upload.fields([
   { name: 'image_3', maxCount: 1 }
 ]), async (req, res) => {
   try {
-      console.log('Received request:', req.body);
+      // Log incoming data
+      console.log('Body:', req.body);
       console.log('Files:', req.files);
 
       const { name, price, description, category, cpu, ram, sd, manhinh, card } = req.body;
 
-      // Upload images sequentially
-      const uploadImage = async (file) => {
+      // Check if files exist
+      if (!req.files || !req.files['image']) {
+          return res.status(400).json({ error: 'Image file is required' });
+      }
+
+      // Upload to Cloudinary
+      const uploadToCloudinary = async (file) => {
           if (!file) return null;
           const result = await cloudinary.uploader.upload(file.path, {
-              folder: 'products',
-              resource_type: 'auto'
+              folder: 'products'
           });
           return result.secure_url;
       };
 
-      // Process images
+      // Process each image
       const imageUrls = {
-          image: req.files['image'] ? await uploadImage(req.files['image'][0]) : null,
-          imagge_2: req.files['imagge_2'] ? await uploadImage(req.files['imagge_2'][0]) : null,
-          image_3: req.files['image_3'] ? await uploadImage(req.files['image_3'][0]) : null
+          image: await uploadToCloudinary(req.files['image'][0]),
+          imagge_2: req.files['imagge_2'] ? await uploadToCloudinary(req.files['imagge_2'][0]) : null,
+          image_3: req.files['image_3'] ? await uploadToCloudinary(req.files['image_3'][0]) : null
       };
 
       // Insert into database
-      const insertQuery = `
+      const query = `
           INSERT INTO product 
           (name, price, description, category, image, imagge_2, image_3, cpu, ram, sd, manhinh, card) 
           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
@@ -204,7 +209,7 @@ app.post('/products', upload.fields([
           card
       ];
 
-      db.execute(insertQuery, values, (err, result) => {
+      db.execute(query, values, (err, result) => {
           if (err) {
               console.error('Database error:', err);
               return res.status(500).json({ error: 'Database error', details: err.message });
