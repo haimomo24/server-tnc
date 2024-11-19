@@ -9,6 +9,7 @@ const app = express();
 const port = 5000;
 
 // Cấu hình Cloudinary
+const cloudinary = require('cloudinary').v2;
 cloudinary.config({ 
   cloud_name: 'haidinh',
   api_key: '437439486722378',
