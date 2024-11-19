@@ -108,87 +108,63 @@ app.post('/products', upload.fields([
 ]), async (req, res) => {
   try {
       const { name, price, description, category, cpu, ram, sd, manhinh, card } = req.body;
-      
-      // Log dữ liệu nhận được
-      console.log('Received data:', {
-          name, price, description, category, cpu, ram, sd, manhinh, card,
-          files: req.files
-      });
 
-      // Xử lý upload ảnh
+      // Kiểm tra dữ liệu đầu vào
+      if (!name || !price || !description || !category) {
+          return res.status(400).json({
+              error: 'Thiếu thông tin sản phẩm cần thiết'
+          });
+      }
+
+      // Upload ảnh lên Cloudinary
       const uploadToCloudinary = async (file) => {
           if (!file) return null;
-          try {
-              const b64 = Buffer.from(file.buffer).toString('base64');
-              const dataURI = "data:" + file.mimetype + ";base64," + b64;
-              const uploadResponse = await cloudinary.uploader.upload(dataURI, {
-                  resource_type: 'auto',
-                  folder: 'products'
-              });
-              console.log('Upload success:', uploadResponse.secure_url);
-              return uploadResponse.secure_url;
-          } catch (err) {
-              console.error('Upload error:', err);
-              return null;
-          }
+          const b64 = Buffer.from(file.buffer).toString('base64');
+          const dataURI = "data:" + file.mimetype + ";base64," + b64;
+          const result = await cloudinary.uploader.upload(dataURI);
+          return result.secure_url;
       };
 
-      // Upload ảnh và lấy URL
-      const imageUrls = {
-          image: req.files['image'] ? await uploadToCloudinary(req.files['image'][0]) : null,
-          imagge_2: req.files['imagge_2'] ? await uploadToCloudinary(req.files['imagge_2'][0]) : null,
-          image_3: req.files['image_3'] ? await uploadToCloudinary(req.files['image_3'][0]) : null
-      };
+      const image = req.files['image'] ? await uploadToCloudinary(req.files['image'][0]) : null;
+      const imagge_2 = req.files['imagge_2'] ? await uploadToCloudinary(req.files['imagge_2'][0]) : null;
+      const image_3 = req.files['image_3'] ? await uploadToCloudinary(req.files['image_3'][0]) : null;
 
-      console.log('Image URLs:', imageUrls);
-
-      // Chuẩn bị dữ liệu
-      const priceNumber = parseFloat(price);
-      const insertData = [
-          name || '',
-          priceNumber || 0,
-          description || '',
-          category || '',
-          imageUrls.image || null,
-          imageUrls.imagge_2 || null,
-          imageUrls.image_3 || null,
-          cpu || '',
-          ram || '',
-          sd || '',
-          manhinh || '',
-          card || ''
-      ];
-
-      console.log('Data to insert:', insertData);
-
-      // Thực hiện insert
-      const query = 'INSERT INTO product (name, price, description, category, image, imagge_2, image_3, cpu, ram, sd, manhinh, card) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
-      
-      db.execute(query, insertData, (err, results) => {
-          if (err) {
-              console.error('Database error details:', {
-                  code: err.code,
-                  errno: err.errno,
-                  sqlMessage: err.sqlMessage,
-                  sqlState: err.sqlState
+      // Sử dụng Promise để xử lý database
+      const insertProduct = () => {
+          return new Promise((resolve, reject) => {
+              const query = 'INSERT INTO product (name, price, description, category, image, imagge_2, image_3, cpu, ram, sd, manhinh, card) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+              
+              db.execute(query, [
+                  name,
+                  Number(price),
+                  description,
+                  category,
+                  image,
+                  imagge_2,
+                  image_3,
+                  cpu || '',
+                  ram || '',
+                  sd || '',
+                  manhinh || '',
+                  card || ''
+              ], (err, results) => {
+                  if (err) reject(err);
+                  else resolve(results);
               });
-              return res.status(500).json({
-                  error: 'Lỗi khi lưu vào database',
-                  details: err.message
-              });
-          }
-          
-          res.status(201).json({
-              message: 'Thêm sản phẩm thành công',
-              productId: results.insertId,
-              imageUrls: imageUrls
           });
+      };
+
+      const result = await insertProduct();
+      
+      res.status(201).json({
+          message: 'Thêm sản phẩm thành công',
+          productId: result.insertId
       });
 
   } catch (error) {
-      console.error('Server error:', error);
+      console.error('Chi tiết lỗi:', error);
       res.status(500).json({
-          error: 'Lỗi server',
+          error: 'Lỗi khi lưu vào database',
           details: error.message
       });
   }
