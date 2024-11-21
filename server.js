@@ -1,224 +1,210 @@
 const express = require('express');
-const mysql = require('mysql2');
+const mysql = require('mysql2/promise');
 const cors = require('cors');
 const multer = require('multer');
 const path = require('path');
 
 const app = express();
-const port = process.env.PORT || 5000; // Dùng cổng từ môi trường hoặc 5000 nếu không có
+const port = process.env.PORT || 5000;
 
-// Cấu hình MySQL kết nối
-const db = mysql.createConnection({
+// Kết nối MySQL
+const db = mysql.createPool({
   host: 'sql12.freemysqlhosting.net',
   user: 'sql12744721',
   password: 'DUS9RQJlKM',
   database: 'sql12744721',
 });
 
-// Kết nối MySQL
-db.connect((err) => {
-  if (err) {
-    console.error('Không thể kết nối tới cơ sở dữ liệu:', err);
-  } else {
-    console.log('Kết nối thành công tới cơ sở dữ liệu');
-  }
-});
+// Kiểm tra kết nối cơ sở dữ liệu
+db.getConnection()
+  .then(() => console.log('Kết nối thành công tới cơ sở dữ liệu'))
+  .catch((err) => console.error('Không thể kết nối tới cơ sở dữ liệu:', err));
 
 // Cấu hình multer để upload file
 const storage = multer.diskStorage({
-  destination: function (req, file, cb) {
-    cb(null, 'uploads/product-images/');
-  },
-  filename: function (req, file, cb) {
-    cb(null, Date.now() + path.extname(file.originalname));
-  }
+  destination: (req, file, cb) => cb(null, 'uploads/product-images/'),
+  filename: (req, file, cb) => cb(null, Date.now() + path.extname(file.originalname)),
 });
+const upload = multer({ storage });
 
-const upload = multer({ storage: storage });
-
-// Middleware để xử lý CORS
+// Middleware
 app.use(cors());
 app.use(express.json());
-
-// Middleware phục vụ file tĩnh
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// API lấy danh sách người dùng
-app.get('/users', (req, res) => {
-  const query = 'SELECT * FROM user';
-  db.execute(query, (err, results) => {
-    if (err) {
-      console.error('Lỗi khi truy vấn bảng user:', err);
-      return res.status(500).json({ error: 'Lỗi hệ thống' });
-    }
-    res.status(200).json(results);
-  });
-});
+// Middleware xử lý lỗi
+const asyncHandler = (fn) => (req, res, next) => {
+  fn(req, res, next).catch(next);
+};
 
-// API đăng ký
-app.post('/register', (req, res) => {
-  const { fullname, email, password, phone, address, level, avatar } = req.body;
+// API: Lấy danh sách người dùng
+app.get(
+  '/users',
+  asyncHandler(async (req, res) => {
+    const [users] = await db.query('SELECT * FROM user');
+    res.status(200).json(users);
+  })
+);
 
-  if (!fullname || !email || !password || !phone || !address || !level || !avatar) {
-    return res.status(400).json({ error: 'Vui lòng điền đầy đủ thông tin.' });
-  }
+// API: Đăng ký
+app.post(
+  '/register',
+  asyncHandler(async (req, res) => {
+    const { fullname, email, password, phone, address, level, avatar } = req.body;
 
-  const checkUserQuery = 'SELECT * FROM user WHERE email = ?';
-  db.execute(checkUserQuery, [email], (err, results) => {
-    if (err) {
-      console.error('Lỗi khi kiểm tra email:', err);
-      return res.status(500).json({ error: 'Lỗi hệ thống' });
+    if (!fullname || !email || !password || !phone || !address || !level || !avatar) {
+      return res.status(400).json({ error: 'Vui lòng điền đầy đủ thông tin.' });
     }
 
-    if (results.length > 0) {
+    const [existingUser] = await db.query('SELECT * FROM user WHERE email = ?', [email]);
+    if (existingUser.length > 0) {
       return res.status(400).json({ error: 'Email này đã được sử dụng.' });
     }
 
-    const insertUserQuery = 'INSERT INTO user (fullname, email, password, phone, address, level, avatar) VALUES (?, ?, ?, ?, ?, ?, ?)';
-    db.execute(insertUserQuery, [fullname, email, password, phone, address, level, avatar], (err, results) => {
-      if (err) {
-        console.error('Lỗi khi thêm người dùng mới:', err.message);
-        return res.status(500).json({ error: 'Lỗi hệ thống' });
-      }
-      res.status(201).json({ message: 'Đăng ký thành công!', userId: results.insertId });
-    });
-  });
-});
+    const [result] = await db.query(
+      'INSERT INTO user (fullname, email, password, phone, address, level, avatar) VALUES (?, ?, ?, ?, ?, ?, ?)',
+      [fullname, email, password, phone, address, level, avatar]
+    );
+    res.status(201).json({ message: 'Đăng ký thành công!', userId: result.insertId });
+  })
+);
 
-// API lấy danh sách sản phẩm
-app.get('/products', (req, res) => {
-  const query = 'SELECT * FROM product';
-  db.execute(query, (err, results) => {
-    if (err) {
-      console.error('Lỗi khi truy vấn bảng sản phẩm:', err);
-      return res.status(500).json({ error: 'Lỗi hệ thống' });
-    }
-    res.status(200).json(results);
-  });
-});
+// API: Lấy danh sách sản phẩm
+app.get(
+  '/products',
+  asyncHandler(async (req, res) => {
+    const [products] = await db.query('SELECT * FROM product');
+    res.status(200).json(products);
+  })
+);
 
-// API thêm sản phẩm mới với upload file
-app.post('/products', upload.fields([
-  { name: 'image', maxCount: 1 },
-  { name: 'imagge_2', maxCount: 1 },
-  { name: 'image_3', maxCount: 1 }
-]), (req, res) => {
-  const { name, price, description, category, cpu, ram, sd, manhinh, card } = req.body;
+// API: Thêm sản phẩm mới
+app.post(
+  '/products',
+  upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'imagge_2', maxCount: 1 },
+    { name: 'image_3', maxCount: 1 },
+  ]),
+  asyncHandler(async (req, res) => {
+    const { name, price, description, category, cpu, ram, sd, manhinh, card } = req.body;
 
-  const image = req.files['image'] ? '/uploads/product-images/' + req.files['image'][0].filename : null;
-  const imagge_2 = req.files['imagge_2'] ? '/uploads/product-images/' + req.files['imagge_2'][0].filename : null;
-  const image_3 = req.files['image_3'] ? '/uploads/product-images/' + req.files['image_3'][0].filename : null;
+    const image = req.files['image'] ? '/uploads/product-images/' + req.files['image'][0].filename : null;
+    const imagge_2 = req.files['imagge_2'] ? '/uploads/product-images/' + req.files['imagge_2'][0].filename : null;
+    const image_3 = req.files['image_3'] ? '/uploads/product-images/' + req.files['image_3'][0].filename : null;
 
-  const query = 'INSERT INTO product (name, price, description, category, image, imagge_2, image_3, cpu, ram, sd, manhinh, card) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
+    const query =
+      'INSERT INTO product (name, price, description, category, image, imagge_2, image_3, cpu, ram, sd, manhinh, card) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)';
 
-  db.execute(query, [name, price, description, category, image, imagge_2, image_3, cpu, ram, sd, manhinh, card], (err, results) => {
-    if (err) {
-      console.error('Lỗi khi thêm sản phẩm:', err);
-      return res.status(500).json({ error: 'Lỗi hệ thống' });
-    }
-    res.status(201).json({
-      message: 'Thêm sản phẩm thành công',
-      productId: results.insertId
-    });
-  });
-});
+    const [result] = await db.query(query, [
+      name,
+      price,
+      description,
+      category,
+      image,
+      imagge_2,
+      image_3,
+      cpu,
+      ram,
+      sd,
+      manhinh,
+      card,
+    ]);
 
-// API lấy chi tiết sản phẩm theo ID
-app.get('/products/:id', (req, res) => {
-  const productId = req.params.id;
-  const query = 'SELECT * FROM product WHERE id = ?';
+    res.status(201).json({ message: 'Thêm sản phẩm thành công', productId: result.insertId });
+  })
+);
 
-  db.execute(query, [productId], (err, results) => {
-    if (err) {
-      console.error('Lỗi khi truy vấn chi tiết sản phẩm:', err);
-      return res.status(500).json({ error: 'Lỗi hệ thống' });
-    }
+// API: Lấy chi tiết sản phẩm
+app.get(
+  '/products/:id',
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const [product] = await db.query('SELECT * FROM product WHERE id = ?', [id]);
 
-    if (results.length === 0) {
+    if (product.length === 0) {
       return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
     }
 
-    res.status(200).json(results[0]);
-  });
-});
+    res.status(200).json(product[0]);
+  })
+);
 
-// API sửa sản phẩm với upload hình ảnh
-app.put('/products/:id', upload.fields([
-  { name: 'image', maxCount: 1 },
-  { name: 'imagge_2', maxCount: 1 },
-  { name: 'image_3', maxCount: 1 }
-]), (req, res) => {
-  const productId = req.params.id;
-  const { name, price, description, category, cpu, ram, sd, manhinh, card } = req.body;
+// API: Sửa sản phẩm
+app.put(
+  '/products/:id',
+  upload.fields([
+    { name: 'image', maxCount: 1 },
+    { name: 'imagge_2', maxCount: 1 },
+    { name: 'image_3', maxCount: 1 },
+  ]),
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const { name, price, description, category, cpu, ram, sd, manhinh, card } = req.body;
 
-  const image = req.files['image'] ? '/uploads/product-images/' + req.files['image'][0].filename : null;
-  const imagge_2 = req.files['imagge_2'] ? '/uploads/product-images/' + req.files['imagge_2'][0].filename : null;
-  const image_3 = req.files['image_3'] ? '/uploads/product-images/' + req.files['image_3'][0].filename : null;
+    const image = req.files['image'] ? '/uploads/product-images/' + req.files['image'][0].filename : null;
+    const imagge_2 = req.files['imagge_2'] ? '/uploads/product-images/' + req.files['imagge_2'][0].filename : null;
+    const image_3 = req.files['image_3'] ? '/uploads/product-images/' + req.files['image_3'][0].filename : null;
 
-  const query = `
-    UPDATE product 
-    SET name = ?, price = ?, description = ?, category = ?, image = ?, imagge_2 = ?, image_3 = ?, cpu = ?, ram = ?, sd = ?, manhinh = ?, card = ? 
-    WHERE id = ?
-  `;
+    const query =
+      'UPDATE product SET name = ?, price = ?, description = ?, category = ?, image = ?, imagge_2 = ?, image_3 = ?, cpu = ?, ram = ?, sd = ?, manhinh = ?, card = ? WHERE id = ?';
 
-  db.execute(query, [name, price, description, category, image, imagge_2, image_3, cpu, ram, sd, manhinh, card, productId], (err, results) => {
-    if (err) {
-      console.error('Lỗi khi sửa sản phẩm:', err);
-      return res.status(500).json({ error: 'Lỗi hệ thống' });
-    }
+    const [result] = await db.query(query, [
+      name,
+      price,
+      description,
+      category,
+      image,
+      imagge_2,
+      image_3,
+      cpu,
+      ram,
+      sd,
+      manhinh,
+      card,
+      id,
+    ]);
 
-    if (results.affectedRows === 0) {
+    if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
     }
 
     res.status(200).json({ message: 'Sản phẩm đã được sửa thành công' });
-  });
-});
+  })
+);
 
-// API xóa sản phẩm
-app.delete('/products/:id', (req, res) => {
-  const productId = req.params.id;
-  const query = 'DELETE FROM product WHERE id = ?';
+// API: Xóa sản phẩm
+app.delete(
+  '/products/:id',
+  asyncHandler(async (req, res) => {
+    const { id } = req.params;
+    const [result] = await db.query('DELETE FROM product WHERE id = ?', [id]);
 
-  db.execute(query, [productId], (err, results) => {
-    if (err) {
-      console.error('Lỗi khi xóa sản phẩm:', err);
-      return res.status(500).json({ error: 'Lỗi hệ thống' });
-    }
-
-    if (results.affectedRows === 0) {
+    if (result.affectedRows === 0) {
       return res.status(404).json({ error: 'Không tìm thấy sản phẩm' });
     }
 
     res.status(200).json({ message: 'Sản phẩm đã được xóa' });
-  });
-});
+  })
+);
 
-// API lấy danh sách sản phẩm trong bảng order
-app.get('/orders', (req, res) => {
-  const query = 'SELECT * FROM `order`';
-  db.execute(query, (err, results) => {
-    if (err) {
-      console.error('Lỗi khi truy vấn bảng order:', err);
-      return res.status(500).json({ error: 'Lỗi hệ thống' });
-    }
-    res.status(200).json(results);
-  });
-});
+// API: Thêm đơn hàng
+app.post(
+  '/orders',
+  asyncHandler(async (req, res) => {
+    const { name, image, price, Address, phone, name_user } = req.body;
+    const query = 'INSERT INTO `order` (name, image, price, Address, phone, name_user) VALUES (?, ?, ?, ?, ?, ?)';
 
-// API thêm sản phẩm vào bảng order
-app.post('/orders', (req, res) => {
-  const { name, image, price, Address, phone, name_user } = req.body;
+    const [result] = await db.query(query, [name, image, price, Address, phone, name_user]);
 
-  const query = 'INSERT INTO `order` (name, image, price, Address, phone, name_user) VALUES (?, ?, ?, ?, ?, ?)';
+    res.status(201).json({ message: 'Đơn hàng đã được tạo', orderId: result.insertId });
+  })
+);
 
-  db.execute(query, [name, image, price, Address, phone, name_user], (err, results) => {
-    if (err) {
-      console.error('Lỗi khi thêm đơn hàng:', err);
-      return res.status(500).json({ error: 'Lỗi hệ thống' });
-    }
-    res.status(201).json({ message: 'Đơn hàng đã được tạo' });
-  });
+// Xử lý lỗi toàn cục
+app.use((err, req, res, next) => {
+  console.error(err.stack);
+  res.status(500).json({ error: 'Lỗi hệ thống' });
 });
 
 app.listen(port, () => {
