@@ -9,10 +9,10 @@ const port = process.env.PORT || 5000;
 
 // Kết nối MySQL
 const db = mysql.createPool({
-  host: 'sql12.freemysqlhosting.net',
-  user: 'sql12744721',
-  password: 'DUS9RQJlKM',
-  database: 'sql12744721',
+  host: 'sql108.infinityfree.com',
+  user: 'if0_37649378',
+  password: '6IXmDJkolw5q8yh',
+  database: 'if0_37649378_laptop_db',
 });
 
 // Kiểm tra kết nối cơ sở dữ liệu
